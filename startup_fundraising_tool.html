@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Startup Valuation & Exit Estimator</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --primary: #2563eb;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --accent: #10b981;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            max-width: 850px;
+            width: 100%;
+        }
+        h2, h3 { color: var(--text-main); margin-top: 1.5rem; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.95rem; }
+        .hint { font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-bottom: 0.5rem; line-height: 1.3; display: block; }
+        .usd-hint { font-size: 0.85rem; color: var(--primary); font-weight: 500; font-style: italic; margin-top: 0.25rem; display: block; }
+        input[type="number"], input[type="text"], select {
+            width: 100%; padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px; font-size: 1rem;
+            box-sizing: border-box;
+        }
+        input[type="range"] { width: 100%; margin-top: 0.5rem; }
+        .slider-header { display: flex; justify-content: space-between; align-items: center; }
+        .slider-val { font-weight: bold; color: var(--primary); }
+        .slider-desc { font-size: 0.85rem; color: var(--text-muted); font-style: italic; margin-top: 0.25rem; min-height: 40px; }
+        .branch { display: none; padding: 1.5rem; background: var(--bg-color); border-radius: 8px; margin-top: 1rem; border: 1px solid var(--border);}
+        .branch.active { display: block; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .results { margin-top: 2rem; padding: 1.5rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; }
+        .result-item { display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 1.05rem; align-items: flex-start; }
+        .result-item .val-block { text-align: right; }
+        .result-item.total { font-weight: bold; font-size: 1.2rem; color: var(--primary); border-top: 1px solid #bfdbfe; padding-top: 0.75rem; align-items: center; }
+        .readonly-input { background-color: #f1f5f9; color: var(--text-muted); font-weight: bold; cursor: not-allowed; }
+        
+        .input-with-btn { display: flex; gap: 0.5rem; }
+        .input-with-btn input { flex-grow: 1; }
+        .input-with-btn button { 
+            padding: 0 1rem; border-radius: 6px; border: 1px solid var(--border); 
+            background: #e2e8f0; cursor: pointer; display: none; font-size: 0.85rem; white-space: nowrap; font-weight: 600;
+        }
+        .input-with-btn button:hover { background: #cbd5e1; }
+        
+        .cap-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.95rem; }
+        .cap-table th, .cap-table td { border: 1px solid var(--border); padding: 0.75rem; text-align: left; vertical-align: middle; }
+        .cap-table th { background-color: #f1f5f9; font-weight: bold; }
+        .cap-table td[rowspan] { background-color: #fafafa; }
+        
+        .author-footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .author-footer strong { color: var(--text-main); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Pro Startup Valuation & Cap Table Estimator</h2>
+    
+    <!-- 1. BASE METRICS -->
+    <div class="grid-2">
+        <div class="form-group">
+            <label>Stage of the Company</label>
+            <span class="hint">Determines whether to value the company based on team/product IP or actual revenue.</span>
+            <select id="stageToggle" onchange="toggleBranch()">
+                <option value="pre">Pre-Revenue (Early Stage)</option>
+                <option value="post">Post-Revenue (Sales)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Sector Multiple</label>
+            <span class="hint">Different industries command different premiums based on profit margins and scalability.</span>
+            <select id="sector" onchange="autoFillBenchmark()">
+                <option value="1.0">Standard Tech (1.0x)</option>
+                <option value="0.8">Consumer (0.8x)</option>
+                <option value="1.2">B2B SaaS (1.2x)</option>
+                <option value="1.5">Deep Tech / AI (1.5x)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Pre-Revenue Branch -->
+    <div id="preBranch" class="branch active">
+        <div class="form-group">
+            <label>Average Sector Seed Valuation (₹ Baseline)</label>
+            <span class="hint">The current market average valuation for a startup in your sector at this stage.</span>
+            <input type="number" id="baseValuation" value="150000000" step="1000000" oninput="calculate()">
+            <span id="baseValUsd" class="usd-hint"></span>
+        </div>
+        
+        <div class="grid-2">
+            <div class="form-group">
+                <div class="slider-header"><label>Team</label><span class="slider-val" id="teamVal">3</span></div>
+                <input type="range" id="team" min="1" max="5" value="3" oninput="updateSlider('team'); calculate()">
+                <div class="slider-desc" id="teamDesc"></div>
+            </div>
+            <div class="form-group">
+                <div class="slider-header"><label>Product</label><span class="slider-val" id="productVal">3</span></div>
+                <input type="range" id="product" min="1" max="5" value="3" oninput="updateSlider('product'); calculate()">
+                <div class="slider-desc" id="productDesc"></div>
+            </div>
+            <div class="form-group">
+                <div class="slider-header"><label>Market</label><span class="slider-val" id="marketVal">3</span></div>
+                <input type="range" id="market" min="1" max="5" value="3" oninput="updateSlider('market'); calculate()">
+                <div class="slider-desc" id="marketDesc"></div>
+            </div>
+            <div class="form-group">
+                <div class="slider-header"><label>Traction</label><span class="slider-val" id="tractionVal">2</span></div>
+                <input type="range" id="traction" min="1" max="5" value="2" oninput="updateSlider('traction'); calculate()">
+                <div class="slider-desc" id="tractionDesc"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Post-Revenue Branch -->
+    <div id="postBranch" class="branch">
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Annual Revenue (ARR ₹)</label>
+                <span class="hint">Your current run-rate or trailing 12 months revenue.</span>
+                <input type="number" id="arr" value="30000000" oninput="calculate()">
+                <span id="arrUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <div class="slider-header"><label>YoY Growth (%)</label><span class="slider-val" id="growthVal">50%</span></div>
+                <input type="range" id="growth" min="0" max="200" value="50" oninput="updateSlider('growth', '%'); calculate()">
+                <div class="slider-desc">Higher growth significantly increases the revenue multiple.</div>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+    
+    <!-- 2. CURRENT ROUND CAP TABLE & INSTRUMENTS -->
+    <h3>Current Round Investment</h3>
+    <div class="grid-2">
+        <div class="form-group">
+            <label>Capital Trying to Raise (₹)</label>
+            <span class="hint">Total injection from the investor in this round.</span>
+            <input type="number" id="capitalAsk" value="10000000" step="100000" oninput="calculate()">
+            <span id="capitalAskUsd" class="usd-hint"></span>
+        </div>
+        <div class="form-group">
+            <label>Current Outstanding Shares</label>
+            <span class="hint">Shares held by founders, employees, and past investors.</span>
+            <input type="number" id="outstandingShares" value="1000000" step="10000" oninput="calculate()">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Investment Instrument</label>
+        <span class="hint">Equity sets a price today. Convertibles set parameters for a future priced round.</span>
+        <select id="instrumentType" onchange="toggleInstrument()">
+            <option value="equity">Priced Equity Round (Standard Shares)</option>
+            <option value="convertible">Convertible (SAFE / Note / CCD / CCPS)</option>
+        </select>
+    </div>
+
+    <div id="convertibleBranch" class="branch">
+        <span class="hint" style="margin-bottom: 1rem;">Investor converts at the Next Round Valuation minus the discount, OR the Valuation Cap—whichever is lower.</span>
+        
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Timeline to Next Round (Months)</label>
+                <input type="number" id="nextRoundMonths" value="18" oninput="calculate()">
+            </div>
+            <div class="form-group">
+                <label>Expected Growth (CAGR %)</label>
+                <input type="number" id="nextRoundGrowth" value="100" oninput="calculate()">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Expected Next Round Valuation (₹)</label>
+            <span class="hint">Auto-projected based on timeline and growth. Edit to override.</span>
+            <div class="input-with-btn">
+                <input type="number" id="nextRoundVal" oninput="markManualOverride(); calculate()">
+                <button type="button" id="resetNextRoundBtn" onclick="resetManualOverride(); calculate()">Reset to Auto</button>
+            </div>
+            <span id="nextRoundValUsd" class="usd-hint"></span>
+        </div>
+
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Valuation Cap (₹)</label>
+                <input type="number" id="valCap" value="400000000" oninput="calculate()">
+                <span id="valCapUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>Discount Rate (%)</label>
+                <input type="number" id="discount" value="20" oninput="calculate()">
+            </div>
+        </div>
+    </div>
+
+    <!-- VALUATION RESULTS -->
+    <div class="results">
+        <div class="result-item">
+            <span>Effective Pre-Money Valuation:</span>
+            <div class="val-block" id="outPreMoney">₹0</div>
+        </div>
+        <div class="result-item">
+            <span>Effective Post-Money Valuation:</span>
+            <div class="val-block" id="outCurrentPostMoney">₹0</div>
+        </div>
+        <div class="result-item">
+            <span>Effective Per Share Value:</span>
+            <div class="val-block" id="outSharePrice">₹0</div>
+        </div>
+        <div class="result-item">
+            <span>Shares Issued to Investor:</span>
+            <div class="val-block" id="outNewShares">0</div>
+        </div>
+        <div class="result-item">
+            <span>Total Post-Money Shares:</span>
+            <div class="val-block" id="outTotalShares">0</div>
+        </div>
+        <div class="result-item total">
+            <span>Implied Investor Ownership:</span>
+            <div class="val-block" id="outDilution">0%</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <!-- FUTURE ROUNDS CAP TABLE SIMULATOR -->
+    <h3>Future Funding Rounds Projection</h3>
+    <span class="hint">Simulate successive rounds to trace exact cap table structural shifts and multiplicative dilution cascading over time.</span>
+    
+    <div class="grid-2">
+        <div>
+            <h4 style="margin-bottom: 0.5rem; color: var(--primary);">Future Round 1 (e.g., Seed)</h4>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Months from Current</label>
+                    <input type="number" id="f1Months" value="18" oninput="calculate()">
+                </div>
+                <div class="form-group">
+                    <label>Expected CAGR (%)</label>
+                    <input type="number" id="f1Growth" value="80" oninput="calculate()">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Pre-Money Valuation (₹)</label>
+                <span class="hint">Auto-projected. Edit to override manually.</span>
+                <div class="input-with-btn">
+                    <input type="number" id="f1PreVal" oninput="markF1Manual(); calculate()">
+                    <button type="button" id="resetF1Btn" onclick="resetF1Manual(); calculate()">Auto</button>
+                </div>
+                <span id="f1PreValUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>New Capital Raised (₹)</label>
+                <input type="number" id="f1Raise" value="80000000" oninput="calculate()">
+                <span id="f1RaiseUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>Post-Money Valuation (₹)</label>
+                <input type="text" id="f1PostVal" class="readonly-input" readonly>
+                <span id="f1PostValUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>ESOP Pool Refresh (%)</label>
+                <span class="hint">Investors require depleted option pools to be refreshed prior to funding.</span>
+                <input type="number" id="f1Esop" value="10" min="0" max="30" oninput="calculate()">
+            </div>
+        </div>
+        
+        <div>
+            <h4 style="margin-bottom: 0.5rem; color: var(--accent);">Future Round 2 (e.g., Series A)</h4>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Months from Round 1</label>
+                    <input type="number" id="f2Months" value="18" oninput="calculate()">
+                </div>
+                <div class="form-group">
+                    <label>Expected CAGR (%)</label>
+                    <input type="number" id="f2Growth" value="60" oninput="calculate()">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Pre-Money Valuation (₹)</label>
+                <span class="hint">Auto-projected. Edit to override manually.</span>
+                <div class="input-with-btn">
+                    <input type="number" id="f2PreVal" oninput="markF2Manual(); calculate()">
+                    <button type="button" id="resetF2Btn" onclick="resetF2Manual(); calculate()">Auto</button>
+                </div>
+                <span id="f2PreValUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>New Capital Raised (₹)</label>
+                <input type="number" id="f2Raise" value="250000000" oninput="calculate()">
+                <span id="f2RaiseUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>Post-Money Valuation (₹)</label>
+                <input type="text" id="f2PostVal" class="readonly-input" readonly>
+                <span id="f2PostValUsd" class="usd-hint"></span>
+            </div>
+            <div class="form-group">
+                <label>ESOP Pool Refresh (%)</label>
+                <input type="number" id="f2Esop" value="5" min="0" max="30" oninput="calculate()">
+            </div>
+        </div>
+    </div>
+
+    <h4 style="margin-top: 1rem; margin-bottom: 0.25rem;">Cascading Equity Ownership Tracking Table</h4>
+    <table class="cap-table" id="dynamicCapTable">
+        <thead>
+            <tr>
+                <th>Shareholder Entity</th>
+                <th>Current Round</th>
+                <th>Future Round 1</th>
+                <th>Future Round 2</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Programmatically injected -->
+        </tbody>
+    </table>
+
+    <hr>
+
+    <!-- 3. EXIT SIMULATOR -->
+    <h3>Liquidity & Secondary Exit Simulator</h3>
+    <span class="hint">Projects returns for various timeline scenarios across all investors. Shows the value generated if an investor exits via secondary sale during a future funding round, versus waiting for a final exit.</span>
+    
+    <div class="grid-2" style="margin-top: 1rem;">
+        <div class="form-group">
+            <label>Years to Final Exit (After Future Round 2)</label>
+            <input type="number" id="exitYears" value="2" min="0" max="15" oninput="calculate()">
+        </div>
+        <div class="form-group">
+            <label>Expected Final Growth (CAGR %)</label>
+            <input type="number" id="exitGrowth" value="50" oninput="calculate()">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Projected Final Exit Valuation (₹)</label>
+        <input type="text" id="projectedExitValuation" class="readonly-input" readonly>
+        <span id="projectedExitUsd" class="usd-hint"></span>
+    </div>
+
+    <h4 style="margin-top: 2rem; margin-bottom: 0.25rem;">Investor Liquidity Scenarios (Secondary vs. Final Exit)</h4>
+    <table class="cap-table" id="liquidityTable">
+        <thead>
+            <tr>
+                <th>Investor Entity</th>
+                <th>Liquidity Event</th>
+                <th>Timeline (From Today)</th>
+                <th>Company Val (₹)</th>
+                <th>Investor Payout (₹)</th>
+                <th>Return (MOIC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Programmatically injected -->
+        </tbody>
+    </table>
+
+    <h4 style="margin-top: 2rem; margin-bottom: 0.25rem;">Final Exit Payout Distribution (All Entities)</h4>
+    <table class="cap-table" id="exitPayoutTable">
+        <thead>
+            <tr>
+                <th>Shareholder Entity</th>
+                <th>Final Ownership</th>
+                <th>Exit Payout (₹)</th>
+                <th>Return (MOIC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Programmatically injected -->
+        </tbody>
+    </table>
+
+    <!-- Author Attribution -->
+    <div class="author-footer">
+        Created by <strong>Ganesh Nageswaran</strong><br>
+        Zensomy Autonomous Technologies
+    </div>
+</div>
+
+<script>
+    const INR_RATE = 83; 
+    
+    const baseFormatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    const usdFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
+    
+    // Dynamic Formatter for Small INR Values (Fixes the "0" display bug)
+    function formatINR(value) {
+        if (value > 0 && value < 10) {
+            return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
+        }
+        return baseFormatter.format(value);
+    }
+    
+    function toUSD(inrValue) {
+        return "~ " + usdFormatter.format(inrValue / INR_RATE);
+    }
+
+    // Dynamic Formatter for Small Share Values
+    function formatShares(value) {
+        if (value > 0 && value < 1) {
+            return value.toFixed(4); // Show 4 decimal places if they only get a fraction of a share
+        }
+        return Math.round(value).toLocaleString('en-IN');
+    }
+
+    const marketBenchmarks = { "1.0": 150000000, "0.8": 120000000, "1.2": 180000000, "1.5": 220000000 };
+    
+    const definitions = {
+        team: {
+            1: "Solo founder, first-time entrepreneur, no direct industry experience.",
+            2: "Small team with some baseline technical or business experience.",
+            3: "Solid mix of technical and business skills. Industry standard.",
+            4: "Domain experts with deep industry knowledge and strong networks.",
+            5: "Repeat founders with previous successful exits and elite engineering talent."
+        },
+        product: {
+            1: "Back-of-the-napkin idea or basic wireframes.",
+            2: "Early lab prototype, not ready for external users.",
+            3: "Working MVP, buggy but demonstrates the core value proposition.",
+            4: "Robust beta version actively being tested by early adopters.",
+            5: "Fully functional product deployed live in the field flawlessly."
+        },
+        market: {
+            1: "Highly localized, niche market with a low revenue ceiling.",
+            2: "Small but rapidly growing emerging market.",
+            3: "Mid-size regional market with healthy demand.",
+            4: "Large national or continental industry.",
+            5: "Massive global pain point in a multi-billion dollar sector."
+        },
+        traction: {
+            1: "Zero external validation; cold outreach stage.",
+            2: "Strong user interest, waitlist, or verbal commitments.",
+            3: "Active free pilots with potential enterprise customers.",
+            4: "Signed Letters of Intent (LOIs) or paid enterprise pilots.",
+            5: "Strong recurring revenue and distribution agreements with major players."
+        }
+    };
+
+    let isNextRoundManual = false;
+    let isF1Manual = false;
+    let isF2Manual = false;
+
+    function markManualOverride() { isNextRoundManual = true; document.getElementById('resetNextRoundBtn').style.display = 'block'; }
+    function resetManualOverride() { isNextRoundManual = false; document.getElementById('resetNextRoundBtn').style.display = 'none'; }
+    
+    function markF1Manual() { isF1Manual = true; document.getElementById('resetF1Btn').style.display = 'block'; }
+    function resetF1Manual() { isF1Manual = false; document.getElementById('resetF1Btn').style.display = 'none'; }
+    
+    function markF2Manual() { isF2Manual = true; document.getElementById('resetF2Btn').style.display = 'block'; }
+    function resetF2Manual() { isF2Manual = false; document.getElementById('resetF2Btn').style.display = 'none'; }
+
+    function toggleBranch() {
+        const stage = document.getElementById('stageToggle').value;
+        const preBranch = document.getElementById('preBranch');
+        if (stage === 'post') {
+            document.getElementById('postBranch').classList.add('active');
+            preBranch.style.opacity = '0.5'; 
+        } else {
+            document.getElementById('postBranch').classList.remove('active');
+            preBranch.style.opacity = '1';
+        }
+        calculate();
+    }
+
+    function toggleInstrument() {
+        const type = document.getElementById('instrumentType').value;
+        if (type === 'convertible') {
+            document.getElementById('convertibleBranch').classList.add('active');
+        } else {
+            document.getElementById('convertibleBranch').classList.remove('active');
+        }
+        calculate();
+    }
+
+    function updateSlider(id, suffix = '') {
+        const val = document.getElementById(id).value;
+        document.getElementById(id + 'Val').innerText = val + suffix;
+        if (definitions[id]) {
+            document.getElementById(id + 'Desc').innerText = definitions[id][val];
+        }
+    }
+
+    function autoFillBenchmark() {
+        document.getElementById('baseValuation').value = marketBenchmarks[document.getElementById('sector').value];
+        calculate();
+    }
+
+    function calculate() {
+        const stage = document.getElementById('stageToggle').value;
+        const capitalAsk = Number(document.getElementById('capitalAsk').value) || 0;
+        const sectorMultiplier = Number(document.getElementById('sector').value) || 1;
+        const outstandingShares = Number(document.getElementById('outstandingShares').value) || 1;
+        const instrument = document.getElementById('instrumentType').value;
+        
+        const baseVal = Number(document.getElementById('baseValuation').value) || 0;
+        const arr = Number(document.getElementById('arr').value) || 0;
+
+        // 1. Calculate Intrinsic Value Floor
+        const getScore = (v) => 0.5 + ((v - 1) * 0.25);
+        const intrinsicValue = baseVal * (getScore(document.getElementById('team').value)*0.3 + getScore(document.getElementById('product').value)*0.3 + getScore(document.getElementById('market').value)*0.2 + getScore(document.getElementById('traction').value)*0.2) * sectorMultiplier;
+        
+        let baselinePreMoney = intrinsicValue;
+        let baseNote = "";
+
+        // 2. Revenue Multiple Override
+        if (stage === 'post') {
+            const growth = Number(document.getElementById('growth').value) || 0;
+            const revenueValue = arr * (4 + (growth / 200) * 8) * sectorMultiplier;
+            
+            if (revenueValue > intrinsicValue) {
+                baselinePreMoney = revenueValue;
+                baseNote = "<br><span style='font-size:0.8rem; color:#64748b; font-style:italic;'>(Based on Revenue Multiple)</span>";
+            } else {
+                baselinePreMoney = intrinsicValue;
+                baseNote = "<br><span style='font-size:0.8rem; color:#f59e0b; font-style:italic;'>(Used IP Floor: Revenue multiple too low)</span>";
+            }
+        }
+
+        const trueCompanyPostMoney = baselinePreMoney + capitalAsk;
+
+        let valCapInput = document.getElementById('valCap').value;
+        const valCap = valCapInput === "" ? trueCompanyPostMoney : Number(valCapInput);
+        
+        let nextRoundValInput = document.getElementById('nextRoundVal').value;
+        const nextRoundVal = nextRoundValInput === "" ? trueCompanyPostMoney : Number(nextRoundValInput);
+
+        document.getElementById('capitalAskUsd').innerText = toUSD(capitalAsk);
+        document.getElementById('baseValUsd').innerText = toUSD(baseVal);
+        document.getElementById('arrUsd').innerText = toUSD(arr);
+        document.getElementById('valCapUsd').innerText = toUSD(valCap);
+        
+        // 3. Current Round Shares & Cap Table Math
+        let effectivePreMoney = baselinePreMoney;
+        let sharePrice = 0, newShares = 0, postMoneyShares = outstandingShares, ownership = 0;
+        let shareNote = "";
+        let preMoneyNote = "";
+
+        if (instrument === 'equity') {
+            sharePrice = effectivePreMoney / outstandingShares;
+            newShares = sharePrice > 0 ? capitalAsk / sharePrice : 0;
+            postMoneyShares = outstandingShares + newShares;
+            ownership = postMoneyShares > 0 ? (newShares / postMoneyShares) : 0;
+            preMoneyNote = baseNote; 
+        } else {
+            const nextRoundMonths = Number(document.getElementById('nextRoundMonths').value) || 0;
+            const nextRoundGrowth = (Number(document.getElementById('nextRoundGrowth').value) || 0) / 100;
+            
+            if (!isNextRoundManual) {
+                const projectedNextRound = trueCompanyPostMoney * Math.pow(1 + nextRoundGrowth, nextRoundMonths / 12);
+                document.getElementById('nextRoundVal').value = Math.round(projectedNextRound);
+            }
+
+            const discount = (Number(document.getElementById('discount').value) || 0) / 100;
+            const activeNextRoundVal = Number(document.getElementById('nextRoundVal').value) || trueCompanyPostMoney;
+            document.getElementById('nextRoundValUsd').innerText = toUSD(activeNextRoundVal);
+            
+            const discountedVal = activeNextRoundVal * (1 - discount);
+            
+            if (discountedVal < valCap) {
+                effectivePreMoney = discountedVal;
+                shareNote = " <br><span style='font-size:0.85rem; color:#64748b; font-style:italic;'>(Based on Discount)</span>";
+                preMoneyNote = "<br><span style='font-size:0.8rem; color:#64748b; font-style:italic;'>(Discounted from Next Round)</span>";
+            } else {
+                effectivePreMoney = valCap;
+                shareNote = " <br><span style='font-size:0.85rem; color:#64748b; font-style:italic;'>(Based on Val Cap)</span>";
+                preMoneyNote = "<br><span style='font-size:0.8rem; color:#64748b; font-style:italic;'>(Capped)</span>";
+            }
+
+            sharePrice = effectivePreMoney / outstandingShares; 
+            newShares = sharePrice > 0 ? capitalAsk / sharePrice : 0;     
+            postMoneyShares = outstandingShares + newShares;
+            ownership = postMoneyShares > 0 ? (newShares / postMoneyShares) : 0;
+        }
+
+        const postMoney = effectivePreMoney + capitalAsk;
+
+        let currentFounderPct = postMoneyShares > 0 ? (outstandingShares / postMoneyShares) * 100 : 0;
+        let currentInvestorPct = ownership * 100;
+
+        // ==========================================
+        // DYNAMIC MULTI-ROUND CASCADING SIMULATION
+        // ==========================================
+        
+        // --- FUTURE ROUND 1 AUTO-PROJECTION ---
+        const f1Months = Number(document.getElementById('f1Months').value) || 0;
+        const f1Growth = (Number(document.getElementById('f1Growth').value) || 0) / 100;
+        if (!isF1Manual) {
+            const projectedF1Val = trueCompanyPostMoney * Math.pow(1 + f1Growth, f1Months / 12);
+            document.getElementById('f1PreVal').value = Math.round(projectedF1Val);
+        }
+        const f1PreVal = Number(document.getElementById('f1PreVal').value) || 0;
+        const f1Raise = Number(document.getElementById('f1Raise').value) || 0;
+        document.getElementById('f1PreValUsd').innerText = toUSD(f1PreVal);
+        document.getElementById('f1RaiseUsd').innerText = toUSD(f1Raise);
+        
+        let f1TotalSharesBeforeCapital = postMoneyShares;
+        const f1EsopPctCreated = Number(document.getElementById('f1Esop').value) || 0;
+        let f1EsopNewShares = f1EsopPctCreated < 100 ? (f1TotalSharesBeforeCapital * (f1EsopPctCreated / 100)) / (1 - (f1EsopPctCreated / 100)) : 0;
+        let f1TotalSharesPreCapital = f1TotalSharesBeforeCapital + f1EsopNewShares;
+        
+        let f1SharePrice = f1TotalSharesPreCapital > 0 ? f1PreVal / f1TotalSharesPreCapital : 0;
+        let f1NewSharesIssued = f1SharePrice > 0 ? f1Raise / f1SharePrice : 0;
+        let f1TotalSharesPostMoney = f1TotalSharesPreCapital + f1NewSharesIssued;
+        const f1PostMoney = f1PreVal + f1Raise;
+
+        document.getElementById('f1PostVal').value = formatINR(f1PostMoney);
+        document.getElementById('f1PostValUsd').innerText = toUSD(f1PostMoney);
+
+        let r1FounderPct = f1TotalSharesPostMoney > 0 ? (outstandingShares / f1TotalSharesPostMoney) * 100 : 0;
+        let r1InvestorPct = f1TotalSharesPostMoney > 0 ? (newShares / f1TotalSharesPostMoney) * 100 : 0;
+        let r1EsopPct = f1TotalSharesPostMoney > 0 ? (f1EsopNewShares / f1TotalSharesPostMoney) * 100 : 0;
+        let r1NewInvestorPct = f1TotalSharesPostMoney > 0 ? (f1NewSharesIssued / f1TotalSharesPostMoney) * 100 : 0;
+
+        // --- FUTURE ROUND 2 AUTO-PROJECTION ---
+        const f2Months = Number(document.getElementById('f2Months').value) || 0;
+        const f2Growth = (Number(document.getElementById('f2Growth').value) || 0) / 100;
+        if (!isF2Manual) {
+            const projectedF2Val = f1PostMoney * Math.pow(1 + f2Growth, f2Months / 12);
+            document.getElementById('f2PreVal').value = Math.round(projectedF2Val);
+        }
+        const f2PreVal = Number(document.getElementById('f2PreVal').value) || 0;
+        const f2Raise = Number(document.getElementById('f2Raise').value) || 0;
+        document.getElementById('f2PreValUsd').innerText = toUSD(f2PreVal);
+        document.getElementById('f2RaiseUsd').innerText = toUSD(f2Raise);
+        
+        let f2TotalSharesBeforeCapital = f1TotalSharesPostMoney;
+        const f2EsopPctCreated = Number(document.getElementById('f2Esop').value) || 0;
+        let f2EsopNewShares = f2EsopPctCreated < 100 ? (f2TotalSharesBeforeCapital * (f2EsopPctCreated / 100)) / (1 - (f2EsopPctCreated / 100)) : 0;
+        let f2TotalSharesPreCapital = f2TotalSharesBeforeCapital + f2EsopNewShares;
+        
+        let f2SharePrice = f2TotalSharesPreCapital > 0 ? f2PreVal / f2TotalSharesPreCapital : 0;
+        let f2NewSharesIssued = f2SharePrice > 0 ? f2Raise / f2SharePrice : 0;
+        let f2TotalSharesPostMoney = f2TotalSharesPreCapital + f2NewSharesIssued;
+        const f2PostMoney = f2PreVal + f2Raise;
+
+        document.getElementById('f2PostVal').value = formatINR(f2PostMoney);
+        document.getElementById('f2PostValUsd').innerText = toUSD(f2PostMoney);
+
+        let r2FounderPct = f2TotalSharesPostMoney > 0 ? (outstandingShares / f2TotalSharesPostMoney) * 100 : 0;
+        let r2InvestorPct = f2TotalSharesPostMoney > 0 ? (newShares / f2TotalSharesPostMoney) * 100 : 0;
+        let r2EsopPct = f2TotalSharesPostMoney > 0 ? ((f1EsopNewShares + f2EsopNewShares) / f2TotalSharesPostMoney) * 100 : 0;
+        let r2NewInvestor1Pct = f2TotalSharesPostMoney > 0 ? (f1NewSharesIssued / f2TotalSharesPostMoney) * 100 : 0;
+        let r2NewInvestor2Pct = f2TotalSharesPostMoney > 0 ? (f2NewSharesIssued / f2TotalSharesPostMoney) * 100 : 0;
+
+        // Render Cap Table Data
+        const tbody = document.querySelector("#dynamicCapTable tbody");
+        tbody.innerHTML = `
+            <tr>
+                <td><strong>Original Founders / Past Owners</strong></td>
+                <td>${currentFounderPct.toFixed(2)}%</td>
+                <td>${r1FounderPct.toFixed(2)}%</td>
+                <td>${r2FounderPct.toFixed(2)}%</td>
+            </tr>
+            <tr>
+                <td><strong>Current Round Investor</strong></td>
+                <td>${currentInvestorPct.toFixed(2)}%</td>
+                <td>${r1InvestorPct.toFixed(2)}%</td>
+                <td>${r2InvestorPct.toFixed(2)}%</td>
+            </tr>
+            <tr>
+                <td><strong>ESOP Options Pool</strong></td>
+                <td>0.00%</td>
+                <td>${r1EsopPct.toFixed(2)}%</td>
+                <td>${r2EsopPct.toFixed(2)}%</td>
+            </tr>
+            <tr>
+                <td><strong>Future Round 1 Investor</strong></td>
+                <td>--</td>
+                <td>${r1NewInvestorPct.toFixed(2)}%</td>
+                <td>${r2NewInvestor1Pct.toFixed(2)}%</td>
+            </tr>
+            <tr>
+                <td><strong>Future Round 2 Investor</strong></td>
+                <td>--</td>
+                <td>--</td>
+                <td>${r2NewInvestor2Pct.toFixed(2)}%</td>
+            </tr>
+        `;
+
+        // 4. Exit Math & Payout Distribution
+        const exitYears = Number(document.getElementById('exitYears').value) || 0;
+        const exitGrowth = (Number(document.getElementById('exitGrowth').value) || 0) / 100;
+        
+        const projectedExitValuation = f2PostMoney * Math.pow(1 + exitGrowth, exitYears);
+        const finalSharePrice = f2TotalSharesPostMoney > 0 ? projectedExitValuation / f2TotalSharesPostMoney : 0;
+        
+        // --- Calculate Payouts for ALL Investor Liquidity Scenarios ---
+        
+        const currF1Payout = newShares * f1SharePrice;
+        const currF1Moic = capitalAsk > 0 ? currF1Payout / capitalAsk : 0;
+        
+        const currF2Payout = newShares * f2SharePrice;
+        const currF2Moic = capitalAsk > 0 ? currF2Payout / capitalAsk : 0;
+
+        const currFinalPayout = newShares * finalSharePrice;
+        const currFinalMoic = capitalAsk > 0 ? currFinalPayout / capitalAsk : 0;
+
+        const f1InvF2Payout = f1NewSharesIssued * f2SharePrice;
+        const f1InvF2Moic = f1Raise > 0 ? f1InvF2Payout / f1Raise : 0;
+
+        const f1InvFinalPayout = f1NewSharesIssued * finalSharePrice;
+        const f1InvFinalMoic = f1Raise > 0 ? f1InvFinalPayout / f1Raise : 0;
+
+        const f2InvFinalPayout = f2NewSharesIssued * finalSharePrice;
+        const f2InvFinalMoic = f2Raise > 0 ? f2InvFinalPayout / f2Raise : 0;
+
+        // Render Liquidity Table
+        const liquidityTbody = document.querySelector("#liquidityTable tbody");
+        liquidityTbody.innerHTML = `
+            <!-- Current Investor -->
+            <tr>
+                <td rowspan="3"><strong>Current Investor</strong><br><span class="hint" style="margin-top: 0.25rem;">Inv: ${toUSD(capitalAsk)}</span></td>
+                <td>Exit @ Future Round 1</td>
+                <td>Year ${(f1Months/12).toFixed(1)}</td>
+                <td>${formatINR(f1PreVal)}</td>
+                <td>${formatINR(currF1Payout)}</td>
+                <td><strong style="color: var(--accent);">${currF1Moic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td>Exit @ Future Round 2</td>
+                <td>Year ${((f1Months + f2Months)/12).toFixed(1)}</td>
+                <td>${formatINR(f2PreVal)}</td>
+                <td>${formatINR(currF2Payout)}</td>
+                <td><strong style="color: var(--accent);">${currF2Moic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td>Final Exit</td>
+                <td>Year ${((f1Months + f2Months)/12 + exitYears).toFixed(1)}</td>
+                <td>${formatINR(projectedExitValuation)}</td>
+                <td>${formatINR(currFinalPayout)}</td>
+                <td><strong style="color: var(--accent);">${currFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+
+            <!-- F1 Investor -->
+            <tr>
+                <td rowspan="2"><strong>F1 Investor</strong><br><span class="hint" style="margin-top: 0.25rem;">Inv: ${toUSD(f1Raise)}</span></td>
+                <td>Exit @ Future Round 2</td>
+                <td>Year ${((f1Months + f2Months)/12).toFixed(1)}</td>
+                <td>${formatINR(f2PreVal)}</td>
+                <td>${formatINR(f1InvF2Payout)}</td>
+                <td><strong style="color: var(--accent);">${f1InvF2Moic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td>Final Exit</td>
+                <td>Year ${((f1Months + f2Months)/12 + exitYears).toFixed(1)}</td>
+                <td>${formatINR(projectedExitValuation)}</td>
+                <td>${formatINR(f1InvFinalPayout)}</td>
+                <td><strong style="color: var(--accent);">${f1InvFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+
+            <!-- F2 Investor -->
+            <tr>
+                <td><strong>F2 Investor</strong><br><span class="hint" style="margin-top: 0.25rem;">Inv: ${toUSD(f2Raise)}</span></td>
+                <td>Final Exit</td>
+                <td>Year ${((f1Months + f2Months)/12 + exitYears).toFixed(1)}</td>
+                <td>${formatINR(projectedExitValuation)}</td>
+                <td>${formatINR(f2InvFinalPayout)}</td>
+                <td><strong style="color: var(--accent);">${f2InvFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+        `;
+
+        // Calculate Final Exit Payouts for ALL Entities
+        const exitVal = projectedExitValuation;
+        const founderPayout = exitVal * (r2FounderPct / 100);
+        const esopPayout = exitVal * (r2EsopPct / 100);
+
+        const exitTbody = document.querySelector("#exitPayoutTable tbody");
+        exitTbody.innerHTML = `
+            <tr>
+                <td><strong>Original Founders / Past Owners</strong></td>
+                <td>${r2FounderPct.toFixed(2)}%</td>
+                <td>${formatINR(founderPayout)} <br><span class="hint usd-hint" style="margin:0;">${toUSD(founderPayout)}</span></td>
+                <td>N/A</td>
+            </tr>
+            <tr>
+                <td><strong>Current Round Investor</strong></td>
+                <td>${r2InvestorPct.toFixed(2)}%</td>
+                <td>${formatINR(currFinalPayout)} <br><span class="hint usd-hint" style="margin:0;">${toUSD(currFinalPayout)}</span></td>
+                <td><strong style="color: var(--accent);">${currFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td><strong>Future Round 1 Investor</strong></td>
+                <td>${r2NewInvestor1Pct.toFixed(2)}%</td>
+                <td>${formatINR(f1InvFinalPayout)} <br><span class="hint usd-hint" style="margin:0;">${toUSD(f1InvFinalPayout)}</span></td>
+                <td><strong style="color: var(--accent);">${f1InvFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td><strong>Future Round 2 Investor</strong></td>
+                <td>${r2NewInvestor2Pct.toFixed(2)}%</td>
+                <td>${formatINR(f2InvFinalPayout)} <br><span class="hint usd-hint" style="margin:0;">${toUSD(f2InvFinalPayout)}</span></td>
+                <td><strong style="color: var(--accent);">${f2InvFinalMoic.toFixed(2)}x</strong></td>
+            </tr>
+            <tr>
+                <td><strong>ESOP Options Pool</strong></td>
+                <td>${r2EsopPct.toFixed(2)}%</td>
+                <td>${formatINR(esopPayout)} <br><span class="hint usd-hint" style="margin:0;">${toUSD(esopPayout)}</span></td>
+                <td>N/A</td>
+            </tr>
+        `;
+
+        // 5. Update Top-Level UI
+        document.getElementById('outPreMoney').innerHTML = formatINR(effectivePreMoney) + "<br><span class='hint usd-hint' style='margin:0;'>" + toUSD(effectivePreMoney) + "</span>" + preMoneyNote;
+        document.getElementById('outCurrentPostMoney').innerHTML = formatINR(postMoney) + "<br><span class='hint usd-hint' style='margin:0;'>" + toUSD(postMoney) + "</span>";
+        
+        let shareUsdString = toUSD(sharePrice);
+        if(sharePrice / INR_RATE < 1 && sharePrice > 0) {
+            shareUsdString = "~ " + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 3 }).format(sharePrice / INR_RATE);
+        }
+        
+        document.getElementById('outSharePrice').innerHTML = formatINR(sharePrice) + "<br><span class='hint usd-hint' style='margin:0;'>" + shareUsdString + "</span>" + shareNote;
+        document.getElementById('outNewShares').innerHTML = formatShares(newShares) + shareNote;
+        document.getElementById('outTotalShares').innerText = Math.round(postMoneyShares).toLocaleString('en-IN');
+        document.getElementById('outDilution').innerText = (ownership * 100).toFixed(2) + '%';
+        
+        document.getElementById('projectedExitValuation').value = formatINR(projectedExitValuation);
+        document.getElementById('projectedExitUsd').innerText = toUSD(projectedExitValuation);
+    }
+
+    updateSlider('team'); updateSlider('product'); updateSlider('market'); updateSlider('traction');
+    autoFillBenchmark(); 
+</script>
+</body>
+</html>
